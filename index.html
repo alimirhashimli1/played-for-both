@@ -56,6 +56,8 @@ h1{margin:0;font:800 clamp(2rem,6vw,3.4rem)/.95 var(--display);text-transform:up
 .emblem svg{width:86%;height:auto}
 .name{font:800 clamp(1.25rem,3.6vw,2rem)/1 var(--display);text-transform:uppercase;letter-spacing:.02em;text-wrap:balance}
 .kind{font:600 .7rem/1.3 var(--body);letter-spacing:.16em;text-align:center;text-transform:uppercase;color:var(--chalk-dim);border:1px solid var(--line);border-radius:99px;padding:5px 10px}
+.emblem .q{width:72%;aspect-ratio:1;border:3px dashed var(--line);border-radius:50%;display:grid;place-items:center;font:800 clamp(3rem,9vw,5rem)/1 var(--display);color:var(--chalk-dim)}
+button:disabled{opacity:.4;cursor:not-allowed;transform:none}
 .flip{animation:flip .45s ease both}
 @keyframes flip{from{transform:rotateY(80deg) scale(.9);opacity:.2}to{transform:none;opacity:1}}
 
@@ -148,7 +150,7 @@ details[open] summary{margin-bottom:4px}
     <button class="pt1" id="give1">+1 <span id="b1">Player 1</span> <kbd>1</kbd></button>
     <button class="primary" id="reveal"><span data-i18n="reveal">Reveal answer</span> <kbd>R</kbd></button>
     <button class="pt2" id="give2">+1 <span id="b2">Player 2</span> <kbd>2</kbd></button>
-    <button id="next"><span data-i18n="next">Next pair</span> <kbd data-i18n="space">Space</kbd></button>
+    <button id="next"><span id="nextLbl">Start game</span> <kbd data-i18n="space">Space</kbd></button>
   </div>
 
   <section class="answer" id="answer" hidden>
@@ -201,7 +203,7 @@ const T = {
   en:{
     title:"Who played for both?",
     sub:"Name a footballer who played for the club on the left and the club or country on the right. First correct answer wins the point.",
-    reveal:"Reveal answer", next:"Next pair", space:"Space", fit:"Players who fit", settings:"Game settings",
+    reveal:"Reveal answer", next:"Next pair", start:"Start game", idle:"Press Start for the first pair", mystery:"Mystery team", space:"Space", fit:"Players who fit", settings:"Game settings",
     optKnown:"Only show pairs with at least one known answer. Turn off for fully random pairs, which can be impossible.",
     optNation:"Allow countries (club vs country). Turn off for club vs club only.",
     optFamous:"Build pairs from well-known players only. Turn off for a much harder game with lesser-known names.",
@@ -216,7 +218,7 @@ const T = {
   tr:{
     title:"İkisinde de kim oynadı?",
     sub:"Soldaki kulüpte ve sağdaki kulüpte ya da milli takımda oynamış bir futbolcu söyleyin. İlk doğru cevabı veren puanı alır.",
-    reveal:"Cevabı göster", next:"Sonraki eşleşme", space:"Boşluk", fit:"Uyan oyuncular", settings:"Oyun ayarları",
+    reveal:"Cevabı göster", next:"Sonraki eşleşme", start:"Oyunu başlat", idle:"İlk eşleşme için Başlat'a basın", mystery:"Gizli takım", space:"Boşluk", fit:"Uyan oyuncular", settings:"Oyun ayarları",
     optKnown:"Yalnızca en az bir bilinen cevabı olan eşleşmeleri göster. Kapatırsanız eşleşmeler tamamen rastgele olur ve bazılarının cevabı olmayabilir.",
     optNation:"Ülkelere izin ver (kulüp - milli takım). Kapatırsanız yalnızca kulüp - kulüp eşleşmeleri gelir.",
     optFamous:"Eşleşmeleri yalnızca tanınmış oyunculardan oluştur. Kapatırsanız daha az bilinen isimlerle çok daha zor bir oyun olur.",
@@ -319,6 +321,18 @@ function render(el, e){
 }
 
 let state = {s1:0, s2:0, round:1, pair:null, recent:[]};
+function showIdle(){
+  for (const id of ["left", "right"]) {
+    $(id).innerHTML = `<div class="emblem"><div class="q">?</div></div><div class="name">${t("mystery")}</div><div class="kind">${t("idle")}</div>`;
+  }
+}
+function syncButtons(){
+  const started = !!state.pair;
+  $("nextLbl").textContent = started ? t("next") : t("start");
+  $("next").classList.toggle("primary", !started);
+  $("reveal").classList.toggle("primary", started);
+  ["reveal", "give1", "give2"].forEach(id => { $(id).disabled = !started; });
+}
 let timerId = null, endsAt = 0, total = 0;
 function setRound(){ $("roundLbl").textContent = t("round")(state.round); }
 
@@ -339,10 +353,12 @@ function next(){
   state.pair = [L, R];
   render($("left"), L); render($("right"), R);
   $("answer").hidden = true;
+  syncButtons();
   startTimer();
 }
 
 function reveal(){
+  if (!state.pair) return;
   const [L, R] = state.pair, list = matches(L, R);
   const shown = list.slice(0, 40);
   $("answerList").innerHTML = list.length
@@ -354,6 +370,7 @@ function reveal(){
 }
 
 function point(p){
+  if (!state.pair) return;
   state["s" + p]++; state.round++;
   $("s1").textContent = state.s1; $("s2").textContent = state.s2;
   setRound(); next();
@@ -386,16 +403,16 @@ $("leagueList").addEventListener("change", e => {
   e.target.checked ? enabled.add(l) : enabled.delete(l);
   saveLeagues();
 });
-$("lgAll").onclick = () => { enabled = new Set(DATA.leagues.map(l => l[0])); renderLeagues(); saveLeagues(); next(); };
-$("lgTop5").onclick = () => { enabled = new Set(TOP5); renderLeagues(); saveLeagues(); next(); };
+$("lgAll").onclick = () => { enabled = new Set(DATA.leagues.map(l => l[0])); renderLeagues(); saveLeagues(); };
+$("lgTop5").onclick = () => { enabled = new Set(TOP5); renderLeagues(); saveLeagues(); };
 $("lgNone").onclick = () => { enabled = new Set(); renderLeagues(); saveLeagues(); };
 
 function syncNames(){ $("b1").textContent = $("n1").value || t("player")(1); $("b2").textContent = $("n2").value || t("player")(2); }
 $("n1").addEventListener("input", syncNames); $("n2").addEventListener("input", syncNames);
-$("next").onclick = () => { state.round++; setRound(); next(); };
+$("next").onclick = () => { if (state.pair) { state.round++; setRound(); } next(); };
 $("reveal").onclick = reveal;
 $("give1").onclick = () => point(1); $("give2").onclick = () => point(2);
-$("reset").onclick = () => { state.s1 = state.s2 = 0; state.round = 1; $("s1").textContent = 0; $("s2").textContent = 0; setRound(); next(); };
+$("reset").onclick = () => { stopTimer(); state.s1 = state.s2 = 0; state.round = 1; state.pair = null; state.recent = []; $("s1").textContent = 0; $("s2").textContent = 0; $("timerWrap").hidden = true; $("answer").hidden = true; setRound(); showIdle(); syncButtons(); };
 $("optTimer").onchange = startTimer;
 $("optNation").onchange = buildPool;
 $("optFamous").onchange = buildPool;
@@ -418,15 +435,14 @@ function applyLang(newLang){
   $("langEn").setAttribute("aria-pressed", lang === "en"); $("langTr").setAttribute("aria-pressed", lang === "tr");
   renderLeagues(); setRound(); syncNames();
   if (state.pair) { render($("left"), state.pair[0]); render($("right"), state.pair[1]); if (!$("answer").hidden) reveal(); }
+  else showIdle();
+  syncButtons();
 }
 $("langEn").onclick = () => applyLang("en"); $("langTr").onclick = () => applyLang("tr");
 
-// opening pair: the example from the brief, Togo vs Tottenham
+// start empty: the first pair appears when someone presses Start
 buildPool();
-const tg = DATA.nations.findIndex(n => n[0] === "TOG"), tot = DATA.clubs.findIndex(c => c[0] === "tot");
-state.pair = tg >= 0 && tot >= 0 ? [NC + tg, tot] : null;
 applyLang(lang);
-if (state.pair) startTimer(); else next();
 
 </script>
 </body>
